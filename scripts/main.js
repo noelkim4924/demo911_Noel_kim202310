@@ -80,32 +80,54 @@ function writeHikes() {
 //------------------------------------------------------------------------------
 // Input parameter is a string representing the collection we are reading from
 //------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
+// Input parameter is a string representing the collection we are reading from
+//------------------------------------------------------------------------------
 function displayCardsDynamically(collection) {
     let cardTemplate = document.getElementById("hikeCardTemplate");
 
-    db.collection(collection).get()   //the collection called "hikes"
-        .then(allHikes=> {
+    db.collection(collection)
+    .orderBy("hike_time")
+    .limit(2)
+    .get() //the collection called "hikes"
+        .then(allHikes => {
             //var i = 1;  //Optional: if you want to have a unique ID for each hike
             allHikes.forEach(doc => { //iterate thru each doc
-                var title = doc.data().name;       // get value of the "name" key
-                var details = doc.data().details;  // get value of the "details" key
-				var hikeCode = doc.data().code;    //get unique ID to each hike to be used for fetching right image
+                var title = doc.data().name; // get value of the "name" key
+                var details = doc.data().details; // get value of the "details" key
+                var hikeCode = doc.data().code; //get unique ID to each hike to be used for fetching right image
                 var hikeLength = doc.data().length; //gets the length field
                 var docID = doc.id;
                 let newcard = cardTemplate.content.cloneNode(true);
 
-                //update title and text and image
+                //update title and text and image etc.
                 newcard.querySelector('.card-title').innerHTML = title;
-                newcard.querySelector('.card-length').innerHTML = hikeLength +"km";
+                newcard.querySelector('.card-length').innerHTML = hikeLength + "km";
                 newcard.querySelector('.card-text').innerHTML = details;
                 newcard.querySelector('.card-image').src = `./images/${hikeCode}.jpg`; //Example: NV01.jpg
-                newcard.querySelector('a').href = "eachHike.html?docID="+docID;
+                newcard.querySelector('a').href = "eachHike.html?docID=" + docID;
 
-                //Optional: give unique ids to all elements for future use
-                // newcard.querySelector('.card-title').setAttribute("id", "ctitle" + i);
-                // newcard.querySelector('.card-text').setAttribute("id", "ctext" + i);
-                // newcard.querySelector('.card-image').setAttribute("id", "cimage" + i);
+                //NEW LINE: update to display length, duration, last updated
+                newcard.querySelector('.card-length').innerHTML =
+                    "Length: " + doc.data().length + " km <br>" +
+                    "Duration: " + doc.data().hike_time + "min <br>" +
+                    "Last updated: " + doc.data().last_updated.toDate().toLocaleDateString();
 
+                //NEW LINES: next 2 lines are new for demo#11
+                //this line sets the id attribute for the <i> tag in the format of "save-hikdID" 
+                //so later we know which hike to bookmark based on which hike was clicked
+                newcard.querySelector('i').id = 'save-' + docID;
+                // this line will call a function to save the hikes to the user's document             
+                newcard.querySelector('i').onclick = () => toggleBookmark(docID);
+                currentUser.get().then(userDoc => {
+                    //get the user name
+                    var bookmarks = userDoc.data().bookmarks;
+                    if (bookmarks.includes(docID)) {
+                       document.getElementById('save-' + docID).innerText = 'bookmark';
+                    }
+              })
+                //Finally done modifying newcard
                 //attach to gallery, Example: "hikes-go-here"
                 document.getElementById(collection + "-go-here").appendChild(newcard);
 
@@ -113,5 +135,35 @@ function displayCardsDynamically(collection) {
             })
         })
 }
+//-----------------------------------------------------------------------------
+// This function is called whenever the user clicks on the "bookmark" icon.
+// It adds the hike to the "bookmarks" array
+// Then it will change the bookmark icon from the hollow to the solid version. 
+//-----------------------------------------------------------------------------
+
 
 displayCardsDynamically("hikes");  //input param is the name of the collection
+
+function toggleBookmark(hikeDocID) {
+    currentUser.get().then(userDoc => {
+        var bookmarks = userDoc.data().bookmarks;
+        var iconID = 'save-' + hikeDocID;
+        if (bookmarks.includes(hikeDocID)) {
+            currentUser.update({
+                bookmarks: firebase.firestore.FieldValue.arrayRemove(hikeDocID)
+            }).then(function () {
+                console.log("Bookmark removed for: " + currentUser);
+                document.getElementById(iconID).innerText = 'bookmark_border';
+            });
+        } else {
+            currentUser.set({
+                bookmarks: firebase.firestore.FieldValue.arrayUnion(hikeDocID)
+            }, {
+                merge: true
+            }).then(function () {
+                console.log("Bookmark added for: " + currentUser);
+                document.getElementById(iconID).innerText = 'bookmark';
+            });
+        }
+    });
+}
